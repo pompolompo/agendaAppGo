@@ -1,0 +1,78 @@
+﻿DEFINE MEASURE 'Test Activity'[FP OppTest (Heads, Month)] = 
+		(/* USER DAX BEGIN */
+ 
+var vCustomers =
+    FILTER ( SUMMARIZE ('Test Activity','Calendar'[Date],Customer[Customer Code]), [Opportunity Test (Heads)] )
+var vFirstTest =
+    ADDCOLUMNS(
+        vCustomers,
+        "First OppTest of Month",
+            var vYearMonthNum = FORMAT([Date],"YYYYMM","en-GB")
+            var vYearMonth = TREATAS ( {vYearMonthNum}, 'Calendar'[Month-Year Number] )
+            RETURN
+            CALCULATE(
+            MIN('Test Activity'[Test Activity Date]),
+            ALLEXCEPT('Test Activity',Customer[Customer Code]),
+            vYearMonth,
+            'Test Activity'[M_OPPORTUNITY_TEST_FL]=1
+            )
+            )
+RETURN
+COUNTROWS(FILTER(vFirstTest,[Date]=[First OppTest of Month]))
+/* USER DAX END */)
+
+EVALUATE
+
+-- Variables de fechas
+VAR ayer = TODAY() - 1
+VAR ayerYear = YEAR(ayer)
+VAR ayerMonth = MONTH(ayer)
+VAR ayerDay = DAY(ayer)
+VAR ayerWorkingDay = 
+    CALCULATE(
+        MAX('Calendar'[Working Day Spain]),
+        FILTER(
+            'Calendar',
+            'Calendar'[ISO Year] = ayerYear &&
+            'Calendar'[Month] = ayerMonth &&
+            'Calendar'[Day of Month] = ayerDay
+        )
+    )
+    
+-- Filtro: Month to Date (Current Year & Previous Year)
+VAR filtroFecha = 
+	FILTER(
+		'Calendar',
+		OR('Calendar'[ISO Year] = ayerYear, 'Calendar'[ISO Year] = ayerYear - 1) &&
+		'Calendar'[Month] = ayerMonth &&
+		'Calendar'[Working Day Spain] <= ayerWorkingDay
+	)
+
+-- Filtro: First Appointments
+VAR filtroFirstApps = 
+	TREATAS({"1st APPS"}, 'Service Appointment'[Service Category Descr])
+
+
+RETURN
+SUMMARIZECOLUMNS(
+	-- group by
+    'Shop'[Shop Code - Descr],
+    'Calendar'[ISO Year],
+    'Calendar'[Working Day Spain],
+    
+    -- filtros
+    filtroFecha,
+    filtroFirstApps,
+    
+    -- variables
+    "app_grossSheduled", CALCULATE(
+    					'All Appointments'[Appointments Cancelled by Customer/Shop] + 
+    					'All Appointments'[Agenda Appointments]
+    					),
+    "app_cancelled", 'All Appointments'[Appointments Cancelled by Customer/Shop],
+    "app_netScheduled", 'All Appointments'[Agenda Appointments],
+    "app_completed", 'All Appointments'[Appointments Completed],
+    "htest_valid", 'Test Activity'[Test Valid (Heads)],
+	"htestOpp", 'Test Activity'[FP OppTest (Heads, Month)],
+	"haSalesUnits", 'Sales'[HA Sales (Units)]
+)
